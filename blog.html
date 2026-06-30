@@ -1,0 +1,1079 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Verse — Aurora</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+<style>
+  html, body, #root { background:#07070f !important; margin:0; padding:0; min-height:100vh; }
+  * { box-sizing:border-box; }
+</style>
+</head>
+<body>
+<div id="root">
+  <div id="fallback-msg" style="color:#fff;background:#07070f;min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:monospace;font-size:14px;padding:40px;text-align:center;">
+    Loading Verse… if this message stays, check the browser console (F12) for errors.
+  </div>
+</div>
+<script>
+  window.onerror = function(msg, url, line, col, error) {
+    document.getElementById('root').innerHTML =
+      '<div style="color:#fff;background:#1a0808;min-height:100vh;padding:40px;font-family:monospace;white-space:pre-wrap;font-size:13px;line-height:1.6;"><h2 style="color:#f87171;">Script Error</h2>' +
+      'Message: ' + msg + '\n' +
+      'Line: ' + line + ', Col: ' + col + '\n\n' +
+      (error && error.stack ? 'Stack:\n' + error.stack : '') +
+      '</div>';
+    return false;
+  };
+  // Detect if CDN libraries failed to load (common cause of blank screen)
+  window.addEventListener('load', function() {
+    setTimeout(function() {
+      var root = document.getElementById('root');
+      if (typeof React === 'undefined' || typeof ReactDOM === 'undefined' || typeof Babel === 'undefined') {
+        root.innerHTML =
+          '<div style="color:#fff;background:#1a0808;min-height:100vh;padding:40px;font-family:monospace;font-size:14px;line-height:1.8;">' +
+          '<h2 style="color:#f87171;">Could not load required libraries</h2>' +
+          '<p>This file needs an internet connection to load React from a CDN the first time you open it.</p>' +
+          '<p>Missing: ' +
+            (typeof React==='undefined' ? 'React ' : '') +
+            (typeof ReactDOM==='undefined' ? 'ReactDOM ' : '') +
+            (typeof Babel==='undefined' ? 'Babel' : '') +
+          '</p>' +
+          '<p>Try: (1) checking your internet connection, (2) disabling any ad-blocker/firewall for this page, or (3) opening this file in a different browser.</p>' +
+          '</div>';
+      }
+    }, 1500);
+  });
+</script>
+<script type="text/babel" data-presets="react">
+const { useState, useEffect, useRef } = React;
+
+/* ── inject global styles immediately ── */
+const GLOBAL_CSS = `
+  html, body, #root {
+    background: #07070f !important;
+    margin: 0; padding: 0;
+    min-height: 100vh;
+    color: #f4f0ff;
+    font-family: 'Inter', system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-thumb { background: rgba(139,92,246,.45); border-radius: 9px; }
+  ::selection { background: rgba(139,92,246,.35); color: #fff; }
+  @keyframes aurora {
+    0%   { background-position: 0% 50%; }
+    50%  { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+  }
+  @keyframes floatA { 0%,100%{transform:translateY(0) translateX(0);} 50%{transform:translateY(-22px) translateX(10px);} }
+  @keyframes floatB { 0%,100%{transform:translateY(0) translateX(0);} 50%{transform:translateY(16px) translateX(-14px);} }
+  @keyframes floatC { 0%,100%{transform:translateY(0) translateX(0);} 50%{transform:translateY(-12px) translateX(18px);} }
+  @keyframes fadeUp { from{opacity:0;transform:translateY(20px);} to{opacity:1;transform:translateY(0);} }
+  @keyframes popIn  { from{opacity:0;transform:scale(.93);} to{opacity:1;transform:scale(1);} }
+  @keyframes pulse  { 0%,100%{opacity:.7;} 50%{opacity:1;} }
+  .fadeUp  { animation: fadeUp .5s cubic-bezier(.22,1,.36,1) both; }
+  .fadeUp2 { animation: fadeUp .5s .1s cubic-bezier(.22,1,.36,1) both; }
+  .fadeUp3 { animation: fadeUp .5s .2s cubic-bezier(.22,1,.36,1) both; }
+  .popIn   { animation: popIn .3s cubic-bezier(.22,1,.36,1) both; }
+  input, textarea, button { font-family: inherit; }
+  input:focus, textarea:focus {
+    outline: none !important;
+    border-color: rgba(139,92,246,.6) !important;
+    box-shadow: 0 0 0 3px rgba(139,92,246,.12) !important;
+  }
+`;
+
+/* ── storage ── */
+const DB = { U:"vau_u", P:"vau_p", S:"vau_s" };
+const uid  = () => Math.random().toString(36).slice(2,11);
+const load = k => JSON.parse(localStorage.getItem(k)||"null");
+const save = (k,v) => localStorage.setItem(k,JSON.stringify(v));
+const ago  = iso => {
+  const s = (Date.now()-new Date(iso))/1000;
+  if(s<60) return "just now";
+  if(s<3600) return `${~~(s/60)}m ago`;
+  if(s<86400) return `${~~(s/3600)}h ago`;
+  return new Date(iso).toLocaleDateString("en-IN",{day:"numeric",month:"short"});
+};
+const wpm = t => Math.max(1, Math.ceil(t.split(/\s+/).length / 200));
+
+/* ── aurora palettes ── */
+const PALETTES = [
+  ["#6366f1","#8b5cf6","#ec4899"],
+  ["#0ea5e9","#6366f1","#8b5cf6"],
+  ["#10b981","#0ea5e9","#6366f1"],
+  ["#f59e0b","#ef4444","#ec4899"],
+  ["#06b6d4","#10b981","#84cc16"],
+  ["#f43f5e","#ec4899","#a855f7"],
+  ["#8b5cf6","#06b6d4","#10b981"],
+  ["#f97316","#f59e0b","#eab308"],
+];
+const palette = id => PALETTES[id.split("").reduce((a,c)=>a+c.charCodeAt(0),0) % PALETTES.length];
+const gradStr = (id, deg=135) => { const [a,b,c]=palette(id); return `linear-gradient(${deg}deg,${a},${b},${c})`; };
+
+/* ── tag colours ── */
+const TAGS = {
+  Design:  {bg:"rgba(232,121,249,.15)",fg:"#f0abfc"},
+  Career:  {bg:"rgba(99,102,241,.15)", fg:"#a5b4fc"},
+  React:   {bg:"rgba(56,189,248,.15)", fg:"#7dd3fc"},
+  Tech:    {bg:"rgba(52,211,153,.15)", fg:"#6ee7b7"},
+  Travel:  {bg:"rgba(251,191,36,.15)", fg:"#fde68a"},
+  Life:    {bg:"rgba(244,63,94,.15)",  fg:"#fda4af"},
+  Food:    {bg:"rgba(251,146,60,.15)", fg:"#fed7aa"},
+  Health:  {bg:"rgba(132,204,22,.15)", fg:"#bef264"},
+  SQL:     {bg:"rgba(20,184,166,.15)", fg:"#99f6e4"},
+  Python:  {bg:"rgba(250,204,21,.15)", fg:"#fef08a"},
+  Finance: {bg:"rgba(34,197,94,.15)",  fg:"#86efac"},
+};
+const tagC = t => TAGS[t]||{bg:"rgba(139,92,246,.15)",fg:"#c4b5fd"};
+
+const SYMS = ["◈","◉","✦","◆","★","⬡","◐","▲","✿","⊕"];
+const sym  = id => SYMS[id.split("").reduce((a,c)=>a+c.charCodeAt(0),0) % SYMS.length];
+
+/* ── seed data ── */
+const SEED_USERS = [
+  {id:"u1",name:"Aanya Kapoor",handle:"aanya",pwd:"pass123",initials:"AK",
+   bio:"Product designer & travel photographer. I write about creativity, systems, and the places that surprise me.",
+   location:"Mumbai",joined:"2024-01-10",followers:["u2","u3"]},
+  {id:"u2",name:"Rohan Dev",handle:"rohan",pwd:"pass123",initials:"RD",
+   bio:"Full-stack engineer obsessed with performance and clean APIs.",
+   location:"Bengaluru",joined:"2024-02-14",followers:["u1"]},
+  {id:"u3",name:"Priya Nair",handle:"priya",pwd:"pass123",initials:"PN",
+   bio:"Data scientist & weekend baker. Writes about ML, food, and Rajasthan.",
+   location:"Hyderabad",joined:"2024-03-01",followers:["u1","u2"]},
+];
+const SEED_POSTS = [
+  {id:"p1",authorId:"u1",pinned:true,
+   title:"The Design System Nobody Talks About: Your Own Brain",
+   subtitle:"The constraints you set for yourself are more powerful than any Figma library.",
+   body:`Every designer I respect has a set of invisible rules — personal constraints that live in their head, not in a shared library.\n\nMine started as accident. I was working on a redesign with an absurdly tight deadline and kept making decisions faster than usual, with more confidence. Later I realized why: I had unconsciously narrowed my option space. I'd decided certain things weren't choices anymore — one typeface, three grays, no decorative illustration. The constraint freed me.\n\nThis is the design system nobody ships: the one inside your own head.\n\nProfessional design systems solve a coordination problem. They make sure twelve people building twelve features produce something coherent. That's essential at scale. But a personal system solves a different problem — the paralysis of infinite options.\n\nThe most useful constraint I ever set: the most important element on screen gets the only saturated colour. Everything else is neutral. It sounds limiting. It's actually liberating. Every hierarchy decision becomes easy because you've already made the hardest one.\n\nOther rules I've kept for years: never use more than two font weights on a single screen; all rounded corners share the same radius; empty space is always intentional, never accidental.\n\nNone of these are permanent rules. They're defaults I can override — but only consciously, only deliberately, only with a reason.`,
+   tags:["Design","Career"],createdAt:"2024-04-01T09:00:00Z",
+   comments:[
+     {id:"c1",authorId:"u2",text:"The 'one saturated colour' rule is something I've been doing without naming it. Now I have words for it.",createdAt:"2024-04-01T13:00:00Z"},
+     {id:"c2",authorId:"u3",text:"I applied this to data viz. One highlight colour, everything else muted. Charts got instantly cleaner.",createdAt:"2024-04-02T08:00:00Z"},
+   ],
+   likes:["u2","u3"],bookmarks:["u2"],views:847},
+  {id:"p2",authorId:"u2",pinned:false,
+   title:"React Server Components: What Actually Changes",
+   subtitle:"Not a tutorial. An honest rethinking of where state actually belongs.",
+   body:`I spent a week reading every RSC explainer I could find. Most describe what RSC does. Fewer explain what it means.\n\nHere's what I think it means: for the first time in React's history, the framework has an opinion about where data fetching belongs. The answer is: as close to the data as possible — which usually means the server.\n\nThe old mental model: fetch in useEffect, manage loading state, handle errors, pass data down. This worked. But it meant every component negotiating with the network, the cache, and the component tree simultaneously.\n\nWith RSC, a Server Component just awaits its data. No useEffect, no loading state, no prop drilling. The component renders on the server with data already present. The client receives HTML.\n\nWhat surprised me most is how this changes component design. You stop thinking about 'components that fetch' versus 'components that display.' You start thinking about 'components that run on the server' versus 'components that need interactivity.' The split is different — and I think it's a better split.\n\nThe tradeoff is real: RSC components can't use useState or event handlers. You decide explicitly which parts of your UI are interactive. That feels like extra work until you realize you were making that decision implicitly before, just with more ceremony.`,
+   tags:["React","Tech"],createdAt:"2024-04-08T10:00:00Z",
+   comments:[
+     {id:"c3",authorId:"u1",text:"'The split is different, and I think it's a better split.' This one line helped me more than three other articles.",createdAt:"2024-04-08T15:00:00Z"},
+   ],
+   likes:["u1","u3"],bookmarks:["u1","u3"],views:1203},
+  {id:"p3",authorId:"u3",pinned:false,
+   title:"Rajasthan in the Wrong Season Was the Right Decision",
+   subtitle:"On 44°C heat, market food, and a chai shop in Udaipur where time stopped.",
+   body:`Everyone warns you about the heat. Nobody prepares you for it.\n\nJune in Rajasthan means 44°C by noon. The kind of heat that isn't aggressive — it's absolute. It occupies all available space, including inside your lungs.\n\nWe were three people who had read too many travel blogs and not enough weather reports. We rented a car in Jaipur — bold at 8am, terrifying by 10am when I discovered that Indian highway driving follows social rules invisible to outsiders but completely intuitive once you fully commit and stop hesitating.\n\nThe food was the reason to go. Not restaurant food — market food. Kachori from a steel tray outside a temple at 7am, still hot enough to burn your fingers. Lassi so thick you ate it with a spoon. Dal baati churma that tasted like it had been made specifically for you.\n\nUdaipur broke my expectations completely. I expected the Lake Palace. I got that — but also narrow lanes where nobody spoke English, where two camera-laden strangers were received with complete unbothered warmth. A man gestured us into his chai shop, put two small glasses in front of us, charged us nothing.\n\nThe sunset from Sajjangarh is the kind of thing that makes you understand why people write poetry. I don't write poetry. I stood there for forty minutes anyway.`,
+   tags:["Travel","Life"],createdAt:"2024-04-15T08:00:00Z",
+   comments:[],
+   likes:["u1"],bookmarks:["u1","u2"],views:634},
+  {id:"p4",authorId:"u1",pinned:false,
+   title:"I Deleted My Productivity System. Here's What Happened.",
+   subtitle:"The system became the thing I was optimising for. That was the problem.",
+   body:`I had a beautiful productivity system. Notion database, weekly review template, daily priorities, habit tracker, reading log, project pipeline. Colour-coded. Cross-referenced. Genuinely beautiful.\n\nI also wasn't finishing anything.\n\nThe system had become the thing I was optimising for. I spent 45 minutes every Sunday making sure the system was perfect. I opened Notion before I opened the actual work. I reorganised my tags with energy I should have been writing with.\n\nThis is a known failure mode. The meta-work expands to fill the time available. The system designed to reduce friction becomes the friction.\n\nI deleted everything except a plain text file called today.txt. It contains a list. Three things, maximum. No subtasks, no priorities, no tags. When I finish the three things, I can add more or stop.\n\nI've finished more in the four months since I deleted the system than in the year I maintained it.\n\nA system is a tool. Tools should be evaluated by output, not elegance. My system was elegant. It was also making me feel productive while preventing me from being productive. Those are different things.`,
+   tags:["Life","Career"],createdAt:"2024-04-22T11:00:00Z",
+   comments:[
+     {id:"c4",authorId:"u3",text:"I felt personally attacked reading this. Also: immediately simplifying my system.",createdAt:"2024-04-22T16:00:00Z"},
+     {id:"c5",authorId:"u2",text:"'The meta-work expands to fill the time available.' Accurate to a painful degree.",createdAt:"2024-04-23T09:00:00Z"},
+   ],
+   likes:["u2","u3"],bookmarks:["u3"],views:1891},
+];
+
+function boot(){
+  if(!load(DB.U)) save(DB.U, SEED_USERS);
+  if(!load(DB.P)) save(DB.P, SEED_POSTS);
+}
+
+/* ── design tokens ── */
+const BG    = "#07070f";
+const GLASS = "rgba(255,255,255,0.045)";
+const GBORD = "rgba(255,255,255,0.08)";
+const GHOV  = "rgba(139,92,246,0.5)";
+const TX    = "#f4f0ff";
+const TX2   = "#a09ab8";
+const TX3   = "#564e6e";
+const PUR   = "#8b5cf6";
+const PURL  = "#a78bfa";
+const GLOW  = "rgba(139,92,246,0.25)";
+
+/* ══════════════════ ATOMS ══════════════════ */
+
+function StyleTag() {
+  return <style dangerouslySetInnerHTML={{__html: GLOBAL_CSS}} />;
+}
+
+function Avatar({ name="x", initials="?", size=36, ring=false }) {
+  const g = gradStr(name);
+  return (
+    <div style={{
+      width:size, height:size, borderRadius:"50%", background:g,
+      display:"flex", alignItems:"center", justifyContent:"center",
+      fontSize:size*0.3, fontWeight:800, color:"#fff", flexShrink:0,
+      userSelect:"none",
+      boxShadow: ring
+        ? `0 0 0 2px ${BG}, 0 0 0 4px ${PUR}, 0 0 20px ${GLOW}`
+        : "0 0 0 1px rgba(255,255,255,.08)",
+    }}>{initials}</div>
+  );
+}
+
+function Chip({ label }) {
+  const { bg, fg } = tagC(label);
+  return (
+    <span style={{
+      fontSize:10, fontWeight:700, letterSpacing:.6,
+      padding:"3px 10px", borderRadius:20,
+      background:bg, color:fg, textTransform:"uppercase", whiteSpace:"nowrap",
+    }}>{label}</span>
+  );
+}
+
+function Btn({ variant="primary", size="md", full, disabled, onClick, children, style:sx={} }) {
+  const [hov, setHov] = useState(false);
+  const sizes = {
+    sm: { fontSize:11, padding:"5px 14px", borderRadius:8, gap:5 },
+    md: { fontSize:13, padding:"9px 20px", borderRadius:10, gap:6 },
+    lg: { fontSize:15, padding:"12px 28px", borderRadius:12, gap:7 },
+  };
+  const variants = {
+    primary: {
+      background: hov ? "linear-gradient(135deg,#7c3aed,#6d28d9)" : "linear-gradient(135deg,#8b5cf6,#7c3aed)",
+      color:"#fff", border:"none",
+      boxShadow: hov ? "0 8px 28px rgba(139,92,246,.55)" : "0 4px 16px rgba(139,92,246,.35)",
+    },
+    ghost: {
+      background: hov ? "rgba(255,255,255,.07)" : "rgba(255,255,255,.04)",
+      color:TX2, border:`1px solid ${GBORD}`,
+    },
+    danger: {
+      background: hov ? "rgba(239,68,68,.16)" : "rgba(239,68,68,.08)",
+      color:"#f87171", border:"1px solid rgba(239,68,68,.25)",
+    },
+    glow: {
+      background:"transparent", color:PURL,
+      border:`1px solid rgba(139,92,246,.4)`,
+      boxShadow: hov ? "0 0 18px rgba(139,92,246,.35)" : "none",
+    },
+  };
+  return (
+    <button
+      onMouseEnter={()=>setHov(true)} onMouseLeave={()=>setHov(false)}
+      onClick={onClick} disabled={disabled}
+      style={{
+        display:"inline-flex", alignItems:"center", justifyContent:"center",
+        fontWeight:600, cursor:disabled?"not-allowed":"pointer",
+        opacity:disabled?.45:1, transition:"all .2s",
+        width:full?"100%":"auto",
+        ...sizes[size], ...(variants[variant]||variants.primary), ...sx,
+      }}>{children}</button>
+  );
+}
+
+function GCard({ children, style:sx={}, onClick, hover=true, cls="" }) {
+  const [hov, setHov] = useState(false);
+  return (
+    <div className={cls}
+      onMouseEnter={()=>setHov(true)} onMouseLeave={()=>setHov(false)}
+      onClick={onClick}
+      style={{
+        background: GLASS, backdropFilter:"blur(24px)", WebkitBackdropFilter:"blur(24px)",
+        border:`1px solid ${hov&&hover ? GHOV : GBORD}`,
+        borderRadius:20,
+        boxShadow: hov&&hover
+          ? "0 12px 48px rgba(0,0,0,.55), 0 0 0 1px rgba(139,92,246,.12), inset 0 1px 0 rgba(255,255,255,.06)"
+          : "0 2px 24px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.04)",
+        transform: hov&&hover&&onClick ? "translateY(-4px)" : "none",
+        transition:"all .25s cubic-bezier(.22,1,.36,1)",
+        cursor: onClick?"pointer":"default",
+        ...sx,
+      }}>{children}</div>
+  );
+}
+
+function PostCover({ id, height=180, radius="16px 16px 0 0", showOverlay=true }) {
+  const [a,b,c] = palette(id);
+  const s = sym(id);
+  return (
+    <div style={{
+      height, borderRadius:radius, overflow:"hidden", position:"relative", flexShrink:0,
+      background:`linear-gradient(135deg,${a},${b},${c})`,
+      backgroundSize:"200% 200%", animation:"aurora 7s ease infinite",
+    }}>
+      <div style={{
+        position:"absolute", right:-20, top:-20,
+        fontSize:height*0.9, color:"rgba(255,255,255,.07)",
+        fontWeight:900, lineHeight:1, userSelect:"none", pointerEvents:"none",
+      }}>{s}</div>
+      {showOverlay && (
+        <div style={{
+          position:"absolute", inset:0,
+          background:"linear-gradient(to top,rgba(0,0,0,.55) 0%,transparent 60%)",
+        }}/>
+      )}
+      <div style={{
+        position:"absolute", bottom:14, left:18,
+        width:36, height:3, borderRadius:9, background:"rgba(255,255,255,.4)",
+        boxShadow:"0 2px 8px rgba(0,0,0,.3)",
+      }}/>
+    </div>
+  );
+}
+
+function TextInput({ label, value, onChange, placeholder, type="text", error, multi, rows=5 }) {
+  const baseStyle = {
+    width:"100%", background:"rgba(255,255,255,.03)",
+    border:`1px solid ${error?"rgba(239,68,68,.5)":GBORD}`,
+    borderRadius:12, padding:"11px 16px",
+    fontSize:14, color:TX, lineHeight:1.7, resize:"vertical",
+  };
+  return (
+    <div style={{marginBottom:18}}>
+      {label && (
+        <label style={{display:"block",fontSize:11,fontWeight:700,color:TX3,letterSpacing:1,textTransform:"uppercase",marginBottom:7}}>
+          {label}
+        </label>
+      )}
+      {multi
+        ? <textarea value={value} onChange={onChange} placeholder={placeholder} rows={rows} style={{...baseStyle,minHeight:rows*26}}/>
+        : <input type={type} value={value} onChange={onChange} placeholder={placeholder} style={baseStyle}/>
+      }
+      {error && <p style={{color:"#f87171",fontSize:11,marginTop:5}}>{error}</p>}
+    </div>
+  );
+}
+
+function Toast({ toast }) {
+  if(!toast) return null;
+  return (
+    <div className="popIn" style={{
+      position:"fixed", bottom:28, left:"50%", transform:"translateX(-50%)",
+      zIndex:9999,
+      background:"rgba(12,8,24,.94)", backdropFilter:"blur(20px)",
+      border:`1px solid rgba(139,92,246,.3)`, borderRadius:14,
+      padding:"11px 24px", fontSize:13, color:TX2,
+      boxShadow:"0 20px 60px rgba(0,0,0,.8), 0 0 20px rgba(139,92,246,.15)",
+      display:"flex", alignItems:"center", gap:10, whiteSpace:"nowrap",
+    }}>
+      <span style={{
+        width:20, height:20, borderRadius:"50%", flexShrink:0,
+        background:toast.type==="ok"?"rgba(52,211,153,.2)":"rgba(139,92,246,.2)",
+        display:"flex", alignItems:"center", justifyContent:"center",
+        fontSize:11, color:toast.type==="ok"?"#6ee7b7":PURL,
+      }}>{toast.type==="ok"?"✓":"i"}</span>
+      {toast.msg}
+    </div>
+  );
+}
+
+/* ── Aurora animated orbs background ── */
+function AuroraBg() {
+  return (
+    <div style={{position:"fixed",inset:0,zIndex:0,overflow:"hidden",pointerEvents:"none"}}>
+      <div style={{
+        position:"absolute", width:800, height:800, borderRadius:"50%",
+        background:"radial-gradient(circle,rgba(139,92,246,.2) 0%,transparent 65%)",
+        top:-300, left:-200, animation:"floatA 9s ease-in-out infinite",
+      }}/>
+      <div style={{
+        position:"absolute", width:600, height:600, borderRadius:"50%",
+        background:"radial-gradient(circle,rgba(6,182,212,.15) 0%,transparent 65%)",
+        top:200, right:-150, animation:"floatB 11s ease-in-out infinite",
+      }}/>
+      <div style={{
+        position:"absolute", width:700, height:700, borderRadius:"50%",
+        background:"radial-gradient(circle,rgba(236,72,153,.12) 0%,transparent 65%)",
+        bottom:-250, left:"35%", animation:"floatC 13s ease-in-out infinite",
+      }}/>
+      <div style={{
+        position:"absolute", width:400, height:400, borderRadius:"50%",
+        background:"radial-gradient(circle,rgba(245,158,11,.09) 0%,transparent 65%)",
+        top:"40%", left:"10%", animation:"floatA 15s ease-in-out infinite reverse",
+      }}/>
+    </div>
+  );
+}
+
+/* ── Nav ── */
+function Nav({ me, goTo, logout }) {
+  const [menu, setMenu] = useState(false);
+  return (
+    <nav style={{
+      position:"sticky", top:0, zIndex:300,
+      background:"rgba(7,7,15,.8)", backdropFilter:"blur(24px)", WebkitBackdropFilter:"blur(24px)",
+      borderBottom:"1px solid rgba(255,255,255,.06)",
+    }}>
+      <div style={{maxWidth:1200,margin:"0 auto",padding:"0 28px",height:60,display:"flex",alignItems:"center",gap:6}}>
+        {/* Logo */}
+        <button onClick={()=>goTo("feed")} style={{background:"none",border:"none",cursor:"pointer",padding:0,display:"flex",alignItems:"center",gap:10,marginRight:20}}>
+          <div style={{
+            width:34,height:34,borderRadius:10,
+            background:"linear-gradient(135deg,#8b5cf6,#ec4899)",
+            display:"flex",alignItems:"center",justifyContent:"center",
+            boxShadow:"0 0 20px rgba(139,92,246,.55)",fontSize:17,color:"#fff",fontWeight:900,
+          }}>V</div>
+          <span style={{fontSize:20,fontWeight:800,color:TX,letterSpacing:"-1px"}}>Verse</span>
+        </button>
+
+        {[{l:"Feed",p:"feed"},{l:"Explore",p:"explore"}].map(({l,p})=>(
+          <button key={p} onClick={()=>goTo(p)}
+            style={{background:"none",border:"none",cursor:"pointer",fontSize:13,fontWeight:500,color:TX3,padding:"4px 12px",borderRadius:7,transition:"all .15s"}}
+            onMouseEnter={e=>{e.currentTarget.style.background="rgba(255,255,255,.05)";e.currentTarget.style.color=TX;}}
+            onMouseLeave={e=>{e.currentTarget.style.background="none";e.currentTarget.style.color=TX3;}}
+          >{l}</button>
+        ))}
+
+        <div style={{flex:1}}/>
+
+        {me ? (
+          <div style={{display:"flex",alignItems:"center",gap:10}}>
+            <Btn variant="primary" size="sm" onClick={()=>goTo("write")}>✏ Write</Btn>
+            <div style={{position:"relative"}}>
+              <button onClick={()=>setMenu(m=>!m)} style={{background:"none",border:"none",cursor:"pointer",padding:0}}>
+                <Avatar name={me.name} initials={me.initials} size={34} ring/>
+              </button>
+              {menu && (
+                <div className="popIn" style={{
+                  position:"absolute",right:0,top:"calc(100% + 10px)",width:210,
+                  background:"rgba(12,8,24,.96)",backdropFilter:"blur(24px)",
+                  border:`1px solid ${GBORD}`,borderRadius:16,
+                  boxShadow:"0 24px 64px rgba(0,0,0,.8)",zIndex:400,overflow:"hidden",
+                }}>
+                  <div style={{padding:"14px 16px",borderBottom:`1px solid ${GBORD}`}}>
+                    <p style={{margin:0,fontSize:13,fontWeight:700,color:TX}}>{me.name}</p>
+                    <p style={{margin:0,fontSize:11,color:TX3}}>@{me.handle}</p>
+                  </div>
+                  {[["👤 Profile","profile"],["🔖 Bookmarks","bookmarks"]].map(([l,p])=>(
+                    <button key={p} onClick={()=>{goTo(p);setMenu(false);}}
+                      style={{width:"100%",padding:"11px 16px",background:"none",border:"none",cursor:"pointer",textAlign:"left",fontSize:13,color:TX2,display:"block",transition:"background .15s"}}
+                      onMouseEnter={e=>e.currentTarget.style.background="rgba(255,255,255,.05)"}
+                      onMouseLeave={e=>e.currentTarget.style.background="none"}
+                    >{l}</button>
+                  ))}
+                  <div style={{borderTop:`1px solid ${GBORD}`}}>
+                    <button onClick={()=>{logout();setMenu(false);}}
+                      style={{width:"100%",padding:"11px 16px",background:"none",border:"none",cursor:"pointer",textAlign:"left",fontSize:13,color:"#f87171"}}>
+                      ↩ Sign out
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div style={{display:"flex",gap:8}}>
+            <Btn variant="ghost" size="sm" onClick={()=>goTo("login")}>Log in</Btn>
+            <Btn variant="primary" size="sm" onClick={()=>goTo("register")}>Join Verse</Btn>
+          </div>
+        )}
+      </div>
+    </nav>
+  );
+}
+
+/* ── Post Card ── */
+function Card({ post, author, me, onOpen, onLike, onBook, onAuthor, featured=false }) {
+  const liked = me && post.likes.includes(me.id);
+  const saved = me && post.bookmarks.includes(me.id);
+
+  if(featured) return (
+    <GCard onClick={onOpen} style={{display:"grid",gridTemplateColumns:"1fr 400px",overflow:"hidden",borderRadius:24}} cls="fadeUp2">
+      <div style={{padding:"44px 48px",display:"flex",flexDirection:"column"}}>
+        <div style={{display:"flex",gap:8,marginBottom:18,flexWrap:"wrap",alignItems:"center"}}>
+          <span style={{
+            fontSize:10,fontWeight:800,letterSpacing:1.5,padding:"4px 12px",borderRadius:20,
+            background:"linear-gradient(135deg,rgba(139,92,246,.3),rgba(236,72,153,.2))",
+            color:PURL,border:`1px solid rgba(139,92,246,.35)`,textTransform:"uppercase",
+          }}>★ Featured</span>
+          {post.tags.map(t=><Chip key={t} label={t}/>)}
+        </div>
+        <h2 style={{margin:"0 0 14px",fontSize:30,fontWeight:800,color:TX,lineHeight:1.2,letterSpacing:"-1px"}}>{post.title}</h2>
+        <p style={{margin:"0 0 auto",fontSize:15,color:TX2,lineHeight:1.75,paddingBottom:28}}>{post.subtitle}</p>
+        <div style={{display:"flex",alignItems:"center",gap:14,paddingTop:24,borderTop:`1px solid ${GBORD}`}}>
+          <button onClick={e=>{e.stopPropagation();onAuthor(post.authorId);}} style={{background:"none",border:"none",cursor:"pointer",padding:0}}>
+            <Avatar name={author?.name} initials={author?.initials} size={40} ring/>
+          </button>
+          <div style={{flex:1}}>
+            <p style={{margin:0,fontSize:13,fontWeight:600,color:TX}}>{author?.name}</p>
+            <p style={{margin:0,fontSize:11,color:TX3}}>{ago(post.createdAt)} · {wpm(post.body)} min read · {post.views} views</p>
+          </div>
+          <button onClick={e=>{e.stopPropagation();onLike(post.id);}} style={{background:"none",border:"none",cursor:"pointer",fontSize:14,color:liked?"#f87171":TX3,display:"flex",alignItems:"center",gap:5,padding:0,fontWeight:600}}>
+            {liked?"♥":"♡"} {post.likes.length}
+          </button>
+          <button onClick={e=>{e.stopPropagation();onBook(post.id);}} style={{background:"none",border:"none",cursor:"pointer",fontSize:18,color:saved?"#fbbf24":TX3,padding:0}}>
+            {saved?"🔖":"🏷"}
+          </button>
+        </div>
+      </div>
+      <PostCover id={post.id} height={380} radius="0 24px 24px 0"/>
+    </GCard>
+  );
+
+  return (
+    <GCard onClick={onOpen} style={{display:"flex",flexDirection:"column",overflow:"hidden",borderRadius:20}} cls="fadeUp3">
+      <PostCover id={post.id} height={160} radius="20px 20px 0 0"/>
+      <div style={{padding:"20px 22px",flex:1,display:"flex",flexDirection:"column",gap:10}}>
+        <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{post.tags.map(t=><Chip key={t} label={t}/>)}</div>
+        <h3 style={{margin:0,fontSize:17,fontWeight:800,color:TX,lineHeight:1.3,letterSpacing:"-.3px"}}>{post.title}</h3>
+        <p style={{margin:0,fontSize:13,color:TX2,lineHeight:1.65,flex:1,display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",overflow:"hidden"}}>{post.subtitle}</p>
+        <div style={{borderTop:`1px solid ${GBORD}`,paddingTop:14,display:"flex",alignItems:"center",gap:10}}>
+          <button onClick={e=>{e.stopPropagation();onAuthor(post.authorId);}} style={{background:"none",border:"none",cursor:"pointer",padding:0}}>
+            <Avatar name={author?.name} initials={author?.initials} size={28}/>
+          </button>
+          <div style={{flex:1,minWidth:0}}>
+            <p style={{margin:0,fontSize:11,fontWeight:600,color:TX,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{author?.name}</p>
+            <p style={{margin:0,fontSize:10,color:TX3}}>{ago(post.createdAt)} · {wpm(post.body)} min</p>
+          </div>
+          <button onClick={e=>{e.stopPropagation();onLike(post.id);}} style={{background:"none",border:"none",cursor:"pointer",fontSize:12,color:liked?"#f87171":TX3,display:"flex",alignItems:"center",gap:4,padding:0,fontWeight:600}}>
+            {liked?"♥":"♡"} {post.likes.length}
+          </button>
+          <button onClick={e=>{e.stopPropagation();onBook(post.id);}} style={{background:"none",border:"none",cursor:"pointer",fontSize:15,color:saved?"#fbbf24":TX3,padding:0}}>
+            {saved?"🔖":"🏷"}
+          </button>
+        </div>
+      </div>
+    </GCard>
+  );
+}
+
+/* ══════════════════ PAGES ══════════════════ */
+
+function FeedPage({ posts, allTags, me, getU, openPost, openProfile, toggleLike, toggleBook }) {
+  const [q, setQ]     = useState("");
+  const [tag, setTag] = useState("");
+  const filtered = posts.filter(p=>{
+    const s=q.toLowerCase();
+    return (!s||p.title.toLowerCase().includes(s)||getU(p.authorId)?.name.toLowerCase().includes(s))
+      && (!tag||p.tags.includes(tag));
+  });
+  const feat = filtered.find(p=>p.pinned)||filtered[0];
+  const rest = filtered.filter(p=>p.id!==feat?.id);
+
+  return (
+    <div>
+      {/* Hero */}
+      <div style={{textAlign:"center",marginBottom:48,paddingTop:4}} className="fadeUp">
+        <div style={{
+          display:"inline-block",fontSize:11,fontWeight:700,letterSpacing:2,
+          color:PURL,background:"rgba(139,92,246,.1)",border:`1px solid rgba(139,92,246,.2)`,
+          borderRadius:99,padding:"4px 16px",marginBottom:16,textTransform:"uppercase",
+        }}>The home for curious minds</div>
+        <h1 style={{
+          fontSize:54,fontWeight:900,letterSpacing:"-2.5px",lineHeight:1.05,margin:"0 0 14px",
+          background:"linear-gradient(135deg,#f4f0ff 0%,#a78bfa 35%,#ec4899 70%,#f59e0b 100%)",
+          backgroundSize:"200% 200%", animation:"aurora 5s ease infinite",
+          WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",
+        }}>Ideas worth reading.</h1>
+        <p style={{fontSize:16,color:TX2,margin:"0 0 28px",lineHeight:1.6}}>
+          Discover stories on design, tech, travel, and life.
+        </p>
+        <div style={{position:"relative",maxWidth:480,margin:"0 auto"}}>
+          <span style={{position:"absolute",left:18,top:"50%",transform:"translateY(-50%)",fontSize:18,pointerEvents:"none",color:TX3}}>⌕</span>
+          <input value={q} onChange={e=>setQ(e.target.value)}
+            placeholder="Search stories and writers…"
+            style={{
+              width:"100%",background:"rgba(255,255,255,.05)",backdropFilter:"blur(12px)",
+              border:`1px solid ${GBORD}`,borderRadius:99,
+              padding:"12px 22px 12px 50px",fontSize:14,color:TX,
+            }}/>
+        </div>
+      </div>
+
+      {/* Tag pills */}
+      <div style={{display:"flex",gap:8,marginBottom:36,flexWrap:"wrap",justifyContent:"center"}} className="fadeUp">
+        {allTags.map(t=>{
+          const {bg,fg}=tagC(t);
+          return (
+            <button key={t} onClick={()=>setTag(tag===t?"":t)} style={{
+              fontSize:11,padding:"6px 16px",borderRadius:99,cursor:"pointer",fontWeight:700,
+              border:`1px solid ${tag===t?"rgba(255,255,255,.2)":GBORD}`,
+              background:tag===t?bg:"rgba(255,255,255,.04)",
+              color:tag===t?fg:TX3, transition:"all .2s",
+              boxShadow:tag===t?"0 0 12px rgba(139,92,246,.2)":"none",
+            }}>{t}</button>
+          );
+        })}
+      </div>
+
+      {/* Featured */}
+      {feat && !q && !tag && (
+        <div style={{marginBottom:24}}>
+          <Card post={feat} author={getU(feat.authorId)} me={me}
+            onOpen={()=>openPost(feat.id)} onLike={toggleLike} onBook={toggleBook} onAuthor={openProfile} featured/>
+        </div>
+      )}
+
+      {/* Grid */}
+      {rest.length > 0 && (
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))",gap:20}}>
+          {rest.map(p=>(
+            <Card key={p.id} post={p} author={getU(p.authorId)} me={me}
+              onOpen={()=>openPost(p.id)} onLike={toggleLike} onBook={toggleBook} onAuthor={openProfile}/>
+          ))}
+        </div>
+      )}
+
+      {filtered.length===0 && (
+        <div style={{textAlign:"center",padding:"80px 0",color:TX3}}>
+          <div style={{fontSize:48,marginBottom:12,animation:"pulse 2s ease infinite"}}>✦</div>
+          <p style={{fontSize:18,color:TX2,margin:0}}>No stories found.</p>
+          <p style={{fontSize:13,marginTop:8}}>Try a different search or topic filter.</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ExplorePage({ posts, allTags, me, getU, openPost, openProfile, toggleLike, toggleBook }) {
+  const [active, setActive] = useState("");
+  const sorted = [...posts].sort((a,b)=>b.views-a.views);
+  const shown  = active ? sorted.filter(p=>p.tags.includes(active)) : sorted;
+  return (
+    <div className="fadeUp">
+      <h1 style={{fontSize:36,fontWeight:900,color:TX,letterSpacing:"-1.5px",margin:"0 0 6px"}}>Explore</h1>
+      <p style={{color:TX3,fontSize:14,margin:"0 0 28px"}}>Browse by topic · sorted by most read</p>
+      <div style={{display:"flex",gap:10,marginBottom:32,flexWrap:"wrap"}}>
+        <button onClick={()=>setActive("")} style={{fontSize:12,padding:"7px 18px",borderRadius:99,cursor:"pointer",fontWeight:700,border:`1px solid ${!active?"rgba(139,92,246,.4)":GBORD}`,background:!active?"rgba(139,92,246,.15)":"rgba(255,255,255,.04)",color:!active?PURL:TX3,transition:"all .2s"}}>All</button>
+        {allTags.map(t=>{
+          const{bg,fg}=tagC(t);
+          return <button key={t} onClick={()=>setActive(t===active?"":t)} style={{fontSize:12,padding:"7px 18px",borderRadius:99,cursor:"pointer",fontWeight:700,border:`1px solid ${active===t?"rgba(255,255,255,.2)":GBORD}`,background:active===t?bg:"rgba(255,255,255,.04)",color:active===t?fg:TX3,transition:"all .2s"}}>{t}</button>;
+        })}
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))",gap:20}}>
+        {shown.map(p=><Card key={p.id} post={p} author={getU(p.authorId)} me={me} onOpen={()=>openPost(p.id)} onLike={toggleLike} onBook={toggleBook} onAuthor={openProfile}/>)}
+      </div>
+    </div>
+  );
+}
+
+function PostPage({ post, me, getU, openProfile, toggleLike, toggleBook, addComment, delComment, onEdit, onDelete, back }) {
+  const [txt, setTxt] = useState("");
+  const author = getU(post.authorId);
+  const liked  = me && post.likes.includes(me.id);
+  const saved  = me && post.bookmarks.includes(me.id);
+  const mine   = me?.id === post.authorId;
+  const [a,b,c] = palette(post.id);
+
+  return (
+    <div style={{maxWidth:800,margin:"0 auto"}} className="fadeUp">
+      <button onClick={back} style={{background:"none",border:"none",cursor:"pointer",color:TX3,fontSize:13,display:"flex",alignItems:"center",gap:6,padding:0,marginBottom:32,fontWeight:500}}>
+        ← Back to feed
+      </button>
+
+      {/* Full-width animated cover */}
+      <div style={{
+        height:360,borderRadius:24,overflow:"hidden",marginBottom:36,position:"relative",
+        background:`linear-gradient(135deg,${a},${b},${c})`,
+        backgroundSize:"200% 200%",animation:"aurora 7s ease infinite",
+      }}>
+        <div style={{position:"absolute",right:-30,top:-30,fontSize:280,color:"rgba(255,255,255,.06)",fontWeight:900,lineHeight:1,userSelect:"none"}}>{sym(post.id)}</div>
+        <div style={{position:"absolute",inset:0,background:"linear-gradient(to top,rgba(0,0,0,.65) 0%,rgba(0,0,0,.1) 55%,transparent 100%)"}}/>
+        <div style={{position:"absolute",bottom:0,left:0,right:0,padding:"36px 44px"}}>
+          <div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap"}}>{post.tags.map(t=><Chip key={t} label={t}/>)}</div>
+          <h1 style={{margin:0,fontSize:34,fontWeight:900,color:"#fff",lineHeight:1.15,letterSpacing:"-1px",textShadow:"0 2px 20px rgba(0,0,0,.5)"}}>{post.title}</h1>
+        </div>
+      </div>
+
+      {/* Article */}
+      <GCard style={{padding:"48px 56px",marginBottom:20,borderRadius:24}} hover={false}>
+        {post.subtitle && (
+          <p style={{fontSize:19,color:TX2,lineHeight:1.65,fontStyle:"italic",margin:"0 0 32px",paddingBottom:32,borderBottom:`1px solid ${GBORD}`}}>
+            {post.subtitle}
+          </p>
+        )}
+        <div style={{display:"flex",alignItems:"center",gap:16,marginBottom:36,paddingBottom:28,borderBottom:`1px solid ${GBORD}`}}>
+          <button onClick={()=>openProfile(post.authorId)} style={{background:"none",border:"none",cursor:"pointer",padding:0}}>
+            <Avatar name={author?.name} initials={author?.initials} size={50} ring/>
+          </button>
+          <div style={{flex:1}}>
+            <button onClick={()=>openProfile(post.authorId)} style={{background:"none",border:"none",cursor:"pointer",padding:0,fontSize:15,fontWeight:700,color:TX}}>{author?.name}</button>
+            <p style={{margin:0,fontSize:12,color:TX3}}>{new Date(post.createdAt).toLocaleDateString("en-IN",{day:"numeric",month:"long",year:"numeric"})} · {wpm(post.body)} min read · {post.views} views</p>
+          </div>
+          {mine && (
+            <div style={{display:"flex",gap:8}}>
+              <Btn variant="glow" size="sm" onClick={()=>onEdit(post.id)}>✏ Edit</Btn>
+              <Btn variant="danger" size="sm" onClick={()=>onDelete(post.id)}>🗑</Btn>
+            </div>
+          )}
+        </div>
+        <div style={{fontSize:16,lineHeight:1.95,color:"#ccc8e0"}}>
+          {post.body.split("\n\n").map((p,i)=><p key={i} style={{margin:"0 0 24px"}}>{p}</p>)}
+        </div>
+        <div style={{display:"flex",gap:12,paddingTop:28,borderTop:`1px solid ${GBORD}`,marginTop:8,flexWrap:"wrap"}}>
+          <button onClick={()=>toggleLike(post.id)} style={{background:liked?"rgba(248,113,113,.12)":"rgba(255,255,255,.04)",border:`1px solid ${liked?"rgba(248,113,113,.35)":GBORD}`,borderRadius:99,padding:"8px 20px",cursor:"pointer",display:"flex",alignItems:"center",gap:8,fontSize:14,color:liked?"#f87171":TX2,fontWeight:600,boxShadow:liked?"0 0 16px rgba(248,113,113,.2)":"none",transition:"all .2s"}}>
+            {liked?"♥":"♡"} {post.likes.length} {post.likes.length===1?"like":"likes"}
+          </button>
+          <button onClick={()=>toggleBook(post.id)} style={{background:saved?"rgba(251,191,36,.1)":"rgba(255,255,255,.04)",border:`1px solid ${saved?"rgba(251,191,36,.3)":GBORD}`,borderRadius:99,padding:"8px 20px",cursor:"pointer",display:"flex",alignItems:"center",gap:8,fontSize:14,color:saved?"#fbbf24":TX2,transition:"all .2s"}}>
+            {saved?"🔖 Saved":"🏷 Save"}
+          </button>
+          <span style={{marginLeft:"auto",fontSize:13,color:TX3,alignSelf:"center"}}>💬 {post.comments.length} responses</span>
+        </div>
+      </GCard>
+
+      {/* Comments */}
+      <GCard style={{padding:"36px 56px",borderRadius:24}} hover={false}>
+        <h2 style={{margin:"0 0 28px",fontSize:22,fontWeight:800,color:TX}}>
+          Responses <span style={{color:TX3,fontWeight:400,fontSize:16}}>({post.comments.length})</span>
+        </h2>
+        {me ? (
+          <div style={{display:"flex",gap:14,marginBottom:32}}>
+            <Avatar name={me.name} initials={me.initials} size={40}/>
+            <div style={{flex:1}}>
+              <textarea value={txt} onChange={e=>setTxt(e.target.value)} placeholder="Write a thoughtful response…" rows={3}
+                style={{width:"100%",background:"rgba(255,255,255,.03)",border:`1px solid ${GBORD}`,borderRadius:12,padding:"12px 16px",fontSize:14,color:TX,lineHeight:1.65,resize:"vertical"}}/>
+              <div style={{display:"flex",justifyContent:"flex-end",marginTop:10}}>
+                <Btn variant="primary" size="sm" disabled={!txt.trim()} onClick={()=>{addComment(post.id,txt.trim());setTxt("");}}>Post response</Btn>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div style={{background:"rgba(139,92,246,.06)",border:`1px solid rgba(139,92,246,.15)`,borderRadius:12,padding:"14px 20px",marginBottom:28,fontSize:13,color:TX3}}>
+            🔒 Log in to join the conversation.
+          </div>
+        )}
+        {post.comments.length===0 && <p style={{textAlign:"center",color:TX3,padding:"20px 0",fontSize:14}}>No responses yet — share your thoughts!</p>}
+        {post.comments.map((cm,i)=>{
+          const cu=getU(cm.authorId);
+          const canDel=me&&(me.id===cm.authorId||me.id===post.authorId);
+          return (
+            <div key={cm.id} style={{display:"flex",gap:14,padding:"22px 0",borderBottom:i<post.comments.length-1?`1px solid ${GBORD}`:"none"}}>
+              <button onClick={()=>openProfile(cm.authorId)} style={{background:"none",border:"none",cursor:"pointer",padding:0}}>
+                <Avatar name={cu?.name} initials={cu?.initials} size={38}/>
+              </button>
+              <div style={{flex:1}}>
+                <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
+                  <button onClick={()=>openProfile(cm.authorId)} style={{background:"none",border:"none",cursor:"pointer",padding:0,fontSize:13,fontWeight:700,color:TX}}>{cu?.name}</button>
+                  <span style={{fontSize:11,color:TX3}}>{ago(cm.createdAt)}</span>
+                  {canDel && <button onClick={()=>delComment(post.id,cm.id)} style={{marginLeft:"auto",background:"none",border:"none",cursor:"pointer",color:TX3,fontSize:12,padding:0}}>🗑</button>}
+                </div>
+                <p style={{margin:0,fontSize:14,lineHeight:1.7,color:TX2}}>{cm.text}</p>
+              </div>
+            </div>
+          );
+        })}
+      </GCard>
+    </div>
+  );
+}
+
+const ALL_TOPICS = ["Design","Career","React","Tech","Travel","Life","Food","Health","SQL","Python","Finance"];
+
+function WritePage({ post, onSave, onCancel, me }) {
+  const [title, setTitle] = useState(post?.title||"");
+  const [sub,   setSub]   = useState(post?.subtitle||"");
+  const [body,  setBody]  = useState(post?.body||"");
+  const [tagStr,setTagStr]= useState(post?.tags?.join(", ")||"");
+  const [err,   setErr]   = useState({});
+  const selTags = tagStr.split(",").map(s=>s.trim()).filter(Boolean);
+  const toggleTag = t => {
+    if(selTags.includes(t)) setTagStr(selTags.filter(s=>s!==t).join(", "));
+    else if(selTags.length<5) setTagStr([...selTags,t].join(", "));
+  };
+  const words = body.split(/\s+/).filter(Boolean).length;
+  const submit = () => {
+    const e={};
+    if(!title.trim()) e.title="Title required";
+    if(body.trim().length<80) e.body="Write at least 80 characters";
+    if(Object.keys(e).length){setErr(e);return;}
+    onSave(title.trim(), sub.trim(), body.trim(), selTags.slice(0,5), post?.id);
+  };
+  const draftId = post?.id || ("draft-"+me.id);
+  return (
+    <div style={{maxWidth:840,margin:"0 auto"}} className="fadeUp">
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:28}}>
+        <div>
+          <h1 style={{margin:0,fontSize:26,fontWeight:900,color:TX,letterSpacing:"-1px"}}>{post?"Edit story":"New story"}</h1>
+          <p style={{margin:"4px 0 0",fontSize:12,color:TX3}}>{words} words · ~{wpm(body)} min read</p>
+        </div>
+        <div style={{display:"flex",gap:10}}>
+          <Btn variant="ghost" size="sm" onClick={onCancel}>Discard</Btn>
+          <Btn variant="primary" size="md" onClick={submit}>{post?"Save changes ✓":"Publish →"}</Btn>
+        </div>
+      </div>
+
+      {/* Live cover preview */}
+      <div style={{borderRadius:20,overflow:"hidden",marginBottom:8,border:`1px solid ${GBORD}`}}>
+        <PostCover id={draftId} height={180} radius="20px" showOverlay={false}/>
+      </div>
+      <p style={{fontSize:10,color:TX3,textAlign:"center",letterSpacing:1.5,textTransform:"uppercase",marginBottom:28}}>
+        Live aurora cover — unique per story
+      </p>
+
+      <GCard style={{padding:"36px 44px",borderRadius:24}} hover={false}>
+        {/* Topic picker */}
+        <div style={{marginBottom:22}}>
+          <label style={{display:"block",fontSize:11,fontWeight:700,color:TX3,letterSpacing:1,textTransform:"uppercase",marginBottom:10}}>Topics (pick up to 5)</label>
+          <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+            {ALL_TOPICS.map(t=>{
+              const {bg,fg}=tagC(t); const on=selTags.includes(t);
+              return (
+                <button key={t} onClick={()=>toggleTag(t)} style={{
+                  fontSize:11,padding:"5px 14px",borderRadius:99,cursor:"pointer",fontWeight:700,
+                  background:on?bg:"rgba(255,255,255,.04)",color:on?fg:TX3,
+                  border:`1px solid ${on?"rgba(255,255,255,.15)":GBORD}`,
+                  transition:"all .15s",transform:on?"scale(1.05)":"scale(1)",
+                }}>{t}</button>
+              );
+            })}
+          </div>
+        </div>
+        <TextInput label="Title *" value={title} onChange={e=>setTitle(e.target.value)} placeholder="An irresistible headline…" error={err.title}/>
+        <TextInput label="Subtitle (optional)" value={sub} onChange={e=>setSub(e.target.value)} placeholder="A sentence that makes them want to read on…"/>
+        <TextInput label="Content *" value={body} onChange={e=>setBody(e.target.value)} placeholder={"Write your story here.\n\nUse blank lines to separate paragraphs.\n\nWrite like you're talking to a smart friend — clear, honest, and specific."} multi rows={14} error={err.body}/>
+        <div style={{display:"flex",justifyContent:"flex-end",gap:10}}>
+          <Btn variant="ghost" onClick={onCancel}>Cancel</Btn>
+          <Btn variant="primary" size="lg" onClick={submit}>{post?"Save changes ✓":"Publish story →"}</Btn>
+        </div>
+      </GCard>
+    </div>
+  );
+}
+
+function ProfilePage({ user, posts, me, getU, openPost, toggleLike, toggleBook, back, syncU, users, flash }) {
+  const mine = posts.filter(p=>p.authorId===user.id);
+  const [editing, setEditing] = useState(false);
+  const [bio, setBio] = useState(user.bio||"");
+  const [loc, setLoc] = useState(user.location||"");
+  const isMe = me?.id===user.id;
+  const [a,b,c] = palette(user.id);
+  const totalLikes = mine.reduce((s,p)=>s+p.likes.length,0);
+  const totalViews = mine.reduce((s,p)=>s+(p.views||0),0);
+  const saveProfile = () => {
+    const nu=users.map(u=>u.id===user.id?{...u,bio,location:loc}:u);
+    syncU(nu); setEditing(false); flash("Profile updated ✓");
+  };
+  return (
+    <div style={{maxWidth:920,margin:"0 auto"}} className="fadeUp">
+      <button onClick={back} style={{background:"none",border:"none",cursor:"pointer",color:TX3,fontSize:13,display:"flex",alignItems:"center",gap:6,padding:0,marginBottom:32,fontWeight:500}}>
+        ← Back
+      </button>
+      <GCard style={{overflow:"hidden",marginBottom:24,borderRadius:24}} hover={false}>
+        <div style={{height:180,background:`linear-gradient(135deg,${a},${b},${c})`,backgroundSize:"200% 200%",animation:"aurora 7s ease infinite",position:"relative"}}>
+          <div style={{position:"absolute",inset:0,background:"linear-gradient(to top,rgba(0,0,0,.4),transparent)"}}/>
+          <div style={{position:"absolute",bottom:-48,left:44}}>
+            <Avatar name={user.name} initials={user.initials} size={92} ring/>
+          </div>
+        </div>
+        <div style={{padding:"60px 48px 40px"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12}}>
+            <div>
+              <h1 style={{margin:"0 0 4px",fontSize:26,fontWeight:900,color:TX,letterSpacing:"-1px"}}>{user.name}</h1>
+              <p style={{margin:0,fontSize:13,color:TX3}}>@{user.handle}{user.location&&` · 📍 ${user.location}`} · Joined {new Date(user.joined).toLocaleDateString("en-IN",{month:"long",year:"numeric"})}</p>
+            </div>
+            {isMe&&!editing&&<Btn variant="glow" size="sm" onClick={()=>setEditing(true)}>✏ Edit profile</Btn>}
+          </div>
+          {editing ? (
+            <div style={{marginTop:16}}>
+              <TextInput label="Bio" value={bio} onChange={e=>setBio(e.target.value)} placeholder="Tell people who you are…" multi rows={2}/>
+              <TextInput label="Location" value={loc} onChange={e=>setLoc(e.target.value)} placeholder="City, Country"/>
+              <div style={{display:"flex",gap:10}}><Btn variant="primary" size="sm" onClick={saveProfile}>Save</Btn><Btn variant="ghost" size="sm" onClick={()=>setEditing(false)}>Cancel</Btn></div>
+            </div>
+          ):(
+            <p style={{margin:"10px 0 0",fontSize:14,color:TX2,lineHeight:1.7}}>{user.bio||<span style={{color:TX3,fontStyle:"italic"}}>{isMe?"Add a bio…":"No bio yet."}</span>}</p>
+          )}
+          <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginTop:28}}>
+            {[["Stories",mine.length,"📝"],["Likes",totalLikes,"♥"],["Views",totalViews,"👁"],["Followers",user.followers?.length||0,"👥"]].map(([l,v,ic])=>(
+              <div key={l} style={{background:"rgba(255,255,255,.03)",border:`1px solid ${GBORD}`,borderRadius:14,padding:"16px 18px",textAlign:"center"}}>
+                <p style={{margin:0,fontSize:22,fontWeight:900,color:TX}}>{v}</p>
+                <p style={{margin:"4px 0 0",fontSize:11,color:TX3}}>{ic} {l}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </GCard>
+      <h2 style={{fontSize:13,fontWeight:700,color:TX3,letterSpacing:1.5,textTransform:"uppercase",margin:"0 0 16px"}}>
+        {isMe?"Your stories":"Stories"} ({mine.length})
+      </h2>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(290px,1fr))",gap:16}}>
+        {mine.length===0
+          ?<p style={{color:TX3,fontSize:14}}>No stories yet.</p>
+          :mine.map(p=><Card key={p.id} post={p} author={getU(p.authorId)} me={me} onOpen={()=>openPost(p.id)} onLike={toggleLike} onBook={toggleBook} onAuthor={()=>{}}/>)
+        }
+      </div>
+    </div>
+  );
+}
+
+function BookmarksPage({ posts, me, getU, openPost, toggleLike, toggleBook }) {
+  return (
+    <div className="fadeUp">
+      <h1 style={{fontSize:30,fontWeight:900,color:TX,letterSpacing:"-1px",margin:"0 0 6px"}}>🔖 Bookmarks</h1>
+      <p style={{color:TX3,fontSize:14,margin:"0 0 32px"}}>{posts.length} saved {posts.length===1?"story":"stories"}</p>
+      {posts.length===0 ? (
+        <div style={{textAlign:"center",padding:"80px 0",color:TX3}}>
+          <div style={{fontSize:52,marginBottom:16}}>🏷</div>
+          <p style={{fontSize:16,color:TX2,margin:0}}>No bookmarks yet.</p>
+          <p style={{fontSize:13,marginTop:8}}>Tap 🏷 on any story to save it.</p>
+        </div>
+      ):(
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(290px,1fr))",gap:20}}>
+          {posts.map(p=><Card key={p.id} post={p} author={getU(p.authorId)} me={me} onOpen={()=>openPost(p.id)} onLike={toggleLike} onBook={toggleBook} onAuthor={()=>{}}/>)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AuthPage({ mode, setMode, onLogin, onRegister }) {
+  const [name,   setName]   = useState("");
+  const [handle, setHandle] = useState("");
+  const [pwd,    setPwd]    = useState("");
+  const [err,    setErr]    = useState({});
+  const isL = mode==="login";
+  const submit = () => {
+    const e={};
+    if(!isL&&!name.trim()) e.name="Name required";
+    if(!handle.trim()) e.handle="Username required";
+    if(pwd.length<6) e.pwd="Min 6 characters";
+    if(Object.keys(e).length){setErr(e);return;}
+    const res=isL?onLogin(handle,pwd):onRegister(name,handle,pwd);
+    if(res) setErr({form:res});
+  };
+  const [a,b,c] = palette("auth-banner-seed");
+  return (
+    <div style={{maxWidth:460,margin:"48px auto"}} className="popIn">
+      <GCard style={{overflow:"hidden",borderRadius:24}} hover={false}>
+        <div style={{
+          height:140, position:"relative",
+          background:`linear-gradient(135deg,${a},${b},${c})`,
+          backgroundSize:"200% 200%",animation:"aurora 5s ease infinite",
+          display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:8,
+        }}>
+          <div style={{position:"absolute",inset:0,background:"rgba(0,0,0,.15)"}}/>
+          <div style={{width:50,height:50,borderRadius:14,background:"rgba(255,255,255,.15)",backdropFilter:"blur(10px)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1,border:"1px solid rgba(255,255,255,.25)",fontSize:22,fontWeight:900,color:"#fff"}}>V</div>
+          <span style={{fontSize:10,letterSpacing:3,fontWeight:800,color:"rgba(255,255,255,.75)",textTransform:"uppercase",zIndex:1}}>Verse</span>
+        </div>
+        <div style={{padding:"32px 36px"}}>
+          <h2 style={{margin:"0 0 6px",fontSize:22,fontWeight:900,color:TX}}>{isL?"Welcome back":"Start your story"}</h2>
+          <p style={{margin:"0 0 20px",fontSize:13,color:TX3}}>{isL?"Sign in to your Verse account.":"Join thousands of writers on Verse."}</p>
+          {isL && (
+            <div style={{background:"rgba(139,92,246,.08)",border:"1px solid rgba(139,92,246,.18)",borderRadius:10,padding:"10px 14px",marginBottom:18,fontSize:12,color:TX3}}>
+              Demo: <span style={{color:PURL,fontWeight:700}}>aanya</span> / pass123 &nbsp;·&nbsp; <span style={{color:PURL,fontWeight:700}}>rohan</span> / pass123
+            </div>
+          )}
+          {err.form && <div style={{background:"rgba(248,113,113,.08)",border:"1px solid rgba(248,113,113,.2)",borderRadius:8,padding:"9px 13px",marginBottom:14,fontSize:13,color:"#f87171"}}>{err.form}</div>}
+          {!isL && <TextInput label="Full name" value={name} onChange={e=>setName(e.target.value)} placeholder="Your full name" error={err.name}/>}
+          <TextInput label="Username" value={handle} onChange={e=>setHandle(e.target.value)} placeholder="yourhandle" error={err.handle}/>
+          <TextInput label="Password" type="password" value={pwd} onChange={e=>setPwd(e.target.value)} placeholder="••••••••" error={err.pwd}/>
+          <Btn variant="primary" size="lg" full onClick={submit}>{isL?"Sign in →":"Create account →"}</Btn>
+          <p style={{textAlign:"center",marginTop:20,fontSize:13,color:TX3}}>
+            {isL?"No account? ":"Already on Verse? "}
+            <button onClick={()=>setMode(isL?"register":"login")} style={{background:"none",border:"none",color:PURL,cursor:"pointer",fontSize:13,fontWeight:700}}>{isL?"Join free":"Sign in"}</button>
+          </p>
+        </div>
+      </GCard>
+    </div>
+  );
+}
+
+/* ══════════════════ ROOT APP ══════════════════ */
+function App() {
+  const [users,   setUsers]   = useState([]);
+  const [posts,   setPosts]   = useState([]);
+  const [sess,    setSess]    = useState(null);
+  const [page,    setPage_]   = useState("feed");
+  const [focusId, setFocusId] = useState(null);
+  const [editId,  setEditId]  = useState(null);
+  const [profId,  setProfId]  = useState(null);
+  const [toast,   setToast]   = useState(null);
+  const tRef = useRef();
+
+  useEffect(()=>{ boot(); setUsers(load(DB.U)||[]); setPosts(load(DB.P)||[]); setSess(load(DB.S)); },[]);
+
+  const me    = sess ? (load(DB.U)||[]).find(u=>u.id===sess.uid) : null;
+  const getU  = id => users.find(u=>u.id===id);
+
+  const flash = (msg, type="ok") => {
+    clearTimeout(tRef.current);
+    setToast({msg,type});
+    tRef.current = setTimeout(()=>setToast(null), 3000);
+  };
+
+  const syncU = u => { setUsers(u); save(DB.U,u); };
+  const syncP = p => { setPosts(p); save(DB.P,p); };
+  const goTo  = p => { setPage_(p); window.scrollTo({top:0,behavior:"smooth"}); };
+
+  const login = (handle,pwd) => {
+    const u=users.find(u=>u.handle===handle&&u.pwd===pwd);
+    if(!u) return "Wrong username or password.";
+    const s={uid:u.id}; setSess(s); save(DB.S,s);
+    flash(`Welcome back, ${u.name.split(" ")[0]}! ✨`); goTo("feed"); return null;
+  };
+  const register = (name,handle,pwd) => {
+    if(users.find(u=>u.handle===handle)) return "Username already taken.";
+    const u={id:uid(),name,handle,pwd,initials:name.split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase(),bio:"",location:"",joined:new Date().toISOString().slice(0,10),followers:[]};
+    const nu=[...users,u]; syncU(nu);
+    const s={uid:u.id}; setSess(s); save(DB.S,s);
+    flash(`Welcome to Verse, ${name.split(" ")[0]}! 🎉`); goTo("feed"); return null;
+  };
+  const logout = () => { setSess(null); localStorage.removeItem(DB.S); goTo("feed"); flash("Signed out.","info"); };
+
+  const savePost = (title,sub,body,tags,id) => {
+    if(id){
+      syncP(posts.map(p=>p.id===id?{...p,title,subtitle:sub,body,tags,updatedAt:new Date().toISOString()}:p));
+      flash("Updated ✓"); setEditId(null); setFocusId(id); goTo("post");
+    } else {
+      const p={id:uid(),authorId:me.id,title,subtitle:sub,body,tags,pinned:false,
+        createdAt:new Date().toISOString(),updatedAt:new Date().toISOString(),
+        comments:[],likes:[],bookmarks:[],views:0};
+      syncP([p,...posts]); flash("Published! 🚀"); setFocusId(p.id); goTo("post");
+    }
+  };
+  const delPost     = id => { if(!confirm("Delete this story?"))return; syncP(posts.filter(p=>p.id!==id)); flash("Deleted.","info"); goTo("feed"); };
+  const toggleLike  = id => { if(!me){goTo("login");return;} syncP(posts.map(p=>{if(p.id!==id)return p;const h=p.likes.includes(me.id);return{...p,likes:h?p.likes.filter(i=>i!==me.id):[...p.likes,me.id]};})); };
+  const toggleBook  = id => { if(!me){goTo("login");return;} syncP(posts.map(p=>{if(p.id!==id)return p;const h=p.bookmarks.includes(me.id);return{...p,bookmarks:h?p.bookmarks.filter(i=>i!==me.id):[...p.bookmarks,me.id]};})); };
+  const addComment  = (pid,text) => { const c={id:uid(),authorId:me.id,text,createdAt:new Date().toISOString()}; syncP(posts.map(p=>p.id===pid?{...p,comments:[...p.comments,c]}:p)); };
+  const delComment  = (pid,cid) => { syncP(posts.map(p=>p.id===pid?{...p,comments:p.comments.filter(c=>c.id!==cid)}:p)); flash("Removed.","info"); };
+  const openPost    = id => { syncP(posts.map(p=>p.id===id?{...p,views:(p.views||0)+1}:p)); setFocusId(id); goTo("post"); };
+  const openProfile = id => { setProfId(id); goTo("profile"); };
+
+  const allTags    = [...new Set(posts.flatMap(p=>p.tags))];
+  const focusPost  = posts.find(p=>p.id===focusId);
+  const editPost   = posts.find(p=>p.id===editId);
+  const profUser   = users.find(u=>u.id===profId);
+  const shared     = { me, getU, openPost, openProfile, toggleLike, toggleBook };
+
+  return (
+    <div style={{
+      background:BG, minHeight:"100vh", color:TX,
+      fontFamily:"'Inter',system-ui,-apple-system,sans-serif",
+      position:"relative",
+    }}>
+      {/* Inject styles as first child — runs before paint */}
+      <StyleTag/>
+
+      {/* Animated orb background */}
+      <AuroraBg/>
+
+      {/* Toast notification */}
+      <Toast toast={toast}/>
+
+      {/* All content sits above the background */}
+      <div style={{position:"relative",zIndex:1}}>
+        <Nav me={me} goTo={id=>{ if(id==="profile") setProfId(me?.id); goTo(id); }} logout={logout}/>
+        <div style={{maxWidth:1200,margin:"0 auto",padding:"48px 28px"}}>
+          {page==="feed"      && <FeedPage posts={posts} allTags={allTags} {...shared}/>}
+          {page==="explore"   && <ExplorePage posts={posts} allTags={allTags} {...shared}/>}
+          {page==="post"      && focusPost && <PostPage post={focusPost} {...shared} addComment={addComment} delComment={delComment} onEdit={id=>{setEditId(id);goTo("write");}} onDelete={delPost} back={()=>goTo("feed")}/>}
+          {page==="write"     && me && <WritePage post={editPost} onSave={savePost} onCancel={()=>{setEditId(null);goTo(editPost?"post":"feed");}} me={me}/>}
+          {page==="profile"   && profUser && <ProfilePage user={profUser} posts={posts} {...shared} back={()=>goTo("feed")} syncU={syncU} users={users} flash={flash}/>}
+          {page==="bookmarks" && me && <BookmarksPage posts={posts.filter(p=>p.bookmarks.includes(me.id))} {...shared}/>}
+          {(page==="login"||page==="register") && <AuthPage mode={page} setMode={goTo} onLogin={login} onRegister={register}/>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const root = ReactDOM.createRoot(document.getElementById("root"));
+root.render(<App />);
+</script>
+</body>
+</html>
